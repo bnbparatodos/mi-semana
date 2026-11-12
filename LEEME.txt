@@ -1,4 +1,4 @@
-MI SEMANA · v1.0
+MI SEMANA · v1.2
 Agenda semanal sencilla para Android y navegador.
 
 FUNCIONES
@@ -27,3 +27,22 @@ DATOS Y LIMITACIONES
 - La versión de archivo único mi-semana-v1-demo.html sirve para abrir o inspeccionar la interfaz; para instalar de forma fiable la PWA, usa el sitio HTTPS publicado.
 
 Archivos principales: index.html, styles.css, app.js, manifest.webmanifest, sw.js, icons/*.
+
+
+NOVEDADES v1.1 (12 NOV 2026)
+- Una sola fila de días: la cabecera del calendario.
+- En modo horizontal se muestran los 7 días sin desplazamiento lateral.
+- Toca una casilla de día/hora para ver las tareas guardadas, y toca una para colocarla directamente en ese hueco.
+- Elegir una tarea desde Guardadas usa su hora predeterminada; elegirla desde el calendario usa la hora que tocaste.
+- Siete colores para identificar tareas y plantillas.
+- Validaciones con mensajes claros para agregar pendientes/compras/tareas.
+- Conserva los datos de v1 si actualizas en el MISMO dominio/sitio; la demo HTML abierta como archivo local puede usar otro almacenamiento, así que exporta respaldo si cambias de ruta o navegador.
+- Sin notificaciones del sistema mientras la app esté cerrada (pendiente de desarrollo).
+
+NOVEDADES v1.2 (12 NOV 2026)
+- Duración libre: horas (0-23) y minutos (0-59); por ejemplo 2 h 30 min, 10 min o 1 minuto.
+- Modo «Recordatorio»: aparece a la hora elegida, sin duración.
+- Modo «Varios días»: fecha inicial y último día (incluido), hasta 730 días. Se muestra arriba de las horas, atravesando todas las fechas afectadas.
+- Las tareas guardadas permiten duración libre, recordatorio o duración predeterminada de 2 a 730 días para reservas.
+- Las tareas de varios días no se repiten; la repetición sigue disponible para eventos con horas o recordatorios.
+- Los datos previos siguen en localStorage bajo «mi-semana-v1» (mismo sitio/dominio).

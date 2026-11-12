@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#f8f9fd" />
   <meta name="description" content="Un calendario semanal sencillo para tareas, pendientes y compras." />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" type="image/png" href="icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
   <title>Mi Semana · Agenda sencilla</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -43,8 +43,7 @@
             <button class="square-btn" id="nextWeek" aria-label="Semana siguiente">›</button>
           </div>
         </div>
-        <div id="weekStrip" class="week-strip" aria-label="Días de esta semana"></div>
-        <div class="calendar-guide">Toca una hora para agregar una tarea. Desliza hacia los lados para ver toda la semana.</div>
+        <div class="calendar-guide">Toca un día y una hora para elegir una tarea guardada o crear una nueva.</div>
         <div class="calendar-shell">
           <div id="calendarScroller" class="calendar-scroller" tabindex="0" aria-label="Calendario semanal con horarios"></div>
         </div>
@@ -53,13 +52,13 @@
 
       <section id="pendingView" class="view" hidden>
         <div class="section-heading"><div><div class="eyebrow">SIN FECHA</div><h1>Pendientes</h1><p>Anota lo que tienes que hacer, aunque todavía no sepas cuándo.</p></div></div>
-        <form id="pendingForm" class="quick-inline"><input id="pendingInput" placeholder="Ej. Comprar pintura para la obra" maxlength="150" required aria-label="Nuevo pendiente"/><button class="primary" type="submit">Agregar</button></form>
+        <form id="pendingForm" class="quick-inline" novalidate><input id="pendingInput" placeholder="Ej. Comprar pintura para la obra" maxlength="150" required aria-label="Nuevo pendiente"/><button class="primary" type="submit">Agregar</button></form>
         <div id="pendingList" class="item-list"></div>
       </section>
 
       <section id="shoppingView" class="view" hidden>
         <div class="section-heading"><div><div class="eyebrow">LO QUE FALTA</div><h1>Lista de compras</h1><p>Apunta lo que necesitas y márcalo cuando lo compres.</p></div></div>
-        <form id="shoppingForm" class="quick-inline"><input id="shoppingInput" placeholder="Ej. Cloro líquido, focos, jabón..." maxlength="150" required aria-label="Nueva compra"/><button class="primary" type="submit">Agregar</button></form>
+        <form id="shoppingForm" class="quick-inline" novalidate><input id="shoppingInput" placeholder="Ej. Cloro líquido, focos, jabón..." maxlength="150" required aria-label="Nueva compra"/><button class="primary" type="submit">Agregar</button></form>
         <div id="shoppingList" class="item-list"></div>
         <button id="clearPurchased" class="text-button" hidden>Eliminar productos comprados</button>
       </section>

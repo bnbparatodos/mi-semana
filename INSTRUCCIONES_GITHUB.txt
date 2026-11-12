@@ -1,0 +1,19 @@
+MI SEMANA · Actualización v1.2 + reparación de instalación
+
+Este ZIP contiene 8 archivos de la aplicación en una sola carpeta (sin subcarpetas):
+index.html, app.js, styles.css, manifest.webmanifest, sw.js, icon-192.png, icon-512.png y LEEME.txt.
+
+REPARACIÓN:
+1. Descomprime el ZIP en tu teléfono.
+2. Entra en github.com/bnbparatodos/mi-semana en Chrome (inicia sesión).
+3. En la página del repositorio, busca Add file > Upload files.
+4. Selecciona TODOS los archivos dentro de la carpeta descomprimida, excepto estas instrucciones. Enviar el ZIP sin extraer no funciona.
+5. Si GitHub te pregunta si deseas reemplazar archivos como index.html o app.js, acepta los cambios.
+6. Pulsa Commit changes.
+7. Espera a que GitHub Pages termine de publicar los cambios. Abre la web en Chrome, recarga, menú ⋮ > Instalar aplicación.
+
+Si Android dificulta la selección de todos los archivos, sube primero los 2 PNG de iconos y después los otros archivos. Usa Chrome en modo sitio para ordenador si el botón Add file no aparece.
+
+El sitio tiene el mismo origen https://bnbparatodos.github.io/mi-semana/ y conserva el almacenamiento local del navegador habitual. Antes de modificarlo, entra en Ajustes y exporta un respaldo. No limpies los datos del sitio ni desinstales su acceso directo hasta hacer respaldo.
+
+Una PWA instalada desde Chrome no es un APK descargable. La aplicación se añade al inicio como app, sin permitir fuentes desconocidas. No incluye notificaciones nativas con app cerrada.

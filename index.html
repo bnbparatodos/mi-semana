@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f8f9fd" />
+  <meta name="description" content="Un calendario semanal sencillo para tareas, pendientes y compras." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <title>Mi Semana · Agenda sencilla</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="identity">
+        <div class="brand-mark" aria-hidden="true">✓</div>
+        <div><div class="brand">Mi Semana</div><div class="subtitle">Todo en orden, sin complicaciones.</div></div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="settingsButton" aria-label="Copia de seguridad y ajustes" title="Respaldo y ajustes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06-2.83 2.83-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21h-4v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06-2.83-2.83.06-.06A1.65 1.65 0 0 0 4.8 15a1.65 1.65 0 0 0-1.51-1H3v-4h.29A1.65 1.65 0 0 0 4.8 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06 2.83-2.83.06.06A1.65 1.65 0 0 0 9.12 4a1.65 1.65 0 0 0 1-1.51V3h4v.29a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06 2.83 2.83-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21v4h-.09A1.65 1.65 0 0 0 19.4 15Z"/></svg>
+        </button>
+        <button class="primary top-add" id="quickAddTop"><span class="plus">+</span> Agregar</button>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Secciones">
+      <button class="tab is-active" data-view="calendar"><span class="tab-icon">▦</span> Calendario</button>
+      <button class="tab" data-view="pending"><span class="tab-icon">☑</span> Pendientes <span id="pendingCount" class="tab-count" hidden></span></button>
+      <button class="tab" data-view="shopping"><span class="tab-icon">◧</span> Compras</button>
+      <button class="tab" data-view="templates"><span class="tab-icon">☆</span> Guardadas</button>
+    </nav>
+
+    <main>
+      <section id="calendarView" class="view">
+        <div class="week-toolbar">
+          <div><div class="eyebrow">TU CALENDARIO</div><h1 id="weekTitle">Esta semana</h1></div>
+          <div class="week-actions">
+            <button class="today-btn" id="todayBtn">Hoy</button>
+            <button class="square-btn" id="prevWeek" aria-label="Semana anterior">‹</button>
+            <button class="square-btn" id="nextWeek" aria-label="Semana siguiente">›</button>
+          </div>
+        </div>
+        <div id="weekStrip" class="week-strip" aria-label="Días de esta semana"></div>
+        <div class="calendar-guide">Toca una hora para agregar una tarea. Desliza hacia los lados para ver toda la semana.</div>
+        <div class="calendar-shell">
+          <div id="calendarScroller" class="calendar-scroller" tabindex="0" aria-label="Calendario semanal con horarios"></div>
+        </div>
+        <div class="calendar-footnote"><span class="legend-dot"></span> Las tareas repetidas aparecerán automáticamente en sus próximos días.</div>
+      </section>
+
+      <section id="pendingView" class="view" hidden>
+        <div class="section-heading"><div><div class="eyebrow">SIN FECHA</div><h1>Pendientes</h1><p>Anota lo que tienes que hacer, aunque todavía no sepas cuándo.</p></div></div>
+        <form id="pendingForm" class="quick-inline"><input id="pendingInput" placeholder="Ej. Comprar pintura para la obra" maxlength="150" required aria-label="Nuevo pendiente"/><button class="primary" type="submit">Agregar</button></form>
+        <div id="pendingList" class="item-list"></div>
+      </section>
+
+      <section id="shoppingView" class="view" hidden>
+        <div class="section-heading"><div><div class="eyebrow">LO QUE FALTA</div><h1>Lista de compras</h1><p>Apunta lo que necesitas y márcalo cuando lo compres.</p></div></div>
+        <form id="shoppingForm" class="quick-inline"><input id="shoppingInput" placeholder="Ej. Cloro líquido, focos, jabón..." maxlength="150" required aria-label="Nueva compra"/><button class="primary" type="submit">Agregar</button></form>
+        <div id="shoppingList" class="item-list"></div>
+        <button id="clearPurchased" class="text-button" hidden>Eliminar productos comprados</button>
+      </section>
+
+      <section id="templatesView" class="view" hidden>
+        <div class="section-heading"><div><div class="eyebrow">UN TOQUE Y LISTO</div><h1>Tareas guardadas</h1><p>Guarda tareas habituales con su hora y repetición predeterminadas.</p></div><button id="newTemplate" class="primary">+ Guardar tarea</button></div>
+        <div class="template-datebar"><label for="templateScheduleDate">Agendar para</label><input type="date" id="templateScheduleDate" /></div>
+        <div id="templatesList" class="template-grid"></div>
+      </section>
+    </main>
+
+    <button id="floatingAdd" class="fab" aria-label="Agregar una tarea, pendiente o compra">+</button>
+  </div>
+
+  <dialog id="dialog" aria-label="Formulario">
+    <div id="dialogContent"></div>
+  </dialog>
+  <input id="backupImport" type="file" accept=".json,application/json" hidden />
+  <script src="app.js" defer></script>
+</body>
+</html>

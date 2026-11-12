@@ -1,0 +1,29 @@
+MI SEMANA · v1.0
+Agenda semanal sencilla para Android y navegador.
+
+FUNCIONES
+- Calendario de lunes a domingo, con horas visibles y navegación por semanas.
+- Toca una casilla horaria para añadir una tarea directamente con fecha y hora.
+- Tareas únicas o repetidas cada N días (1 a 90) o en días específicos de la semana.
+- Completa una aparición sin afectar a las repeticiones futuras.
+- Omite solo una fecha, edita toda la serie o elimina la serie completa.
+- Lista de pendientes sin fecha; puedes pasarlos al calendario con «Agendar».
+- Lista independiente de compras con casillas para marcar lo comprado.
+- Tareas habituales guardadas, con horario y repetición predeterminados. Pulsa «Agendar» para añadir al calendario en la fecha que elijas.
+- Respaldo y restauración mediante archivo .json.
+- Funciona sin conexión tras instalarse y guardar los archivos en caché.
+
+PUBLICACIÓN
+Los archivos del ZIP están listos para publicarse como sitio estático (por ejemplo en Netlify). No necesita GitHub, cuenta de usuario propia, servidor ni base de datos.
+1. Publica los archivos con index.html en la raíz del sitio.
+2. Abre el enlace HTTPS desde Chrome en Android.
+3. En el menú de Chrome, utiliza «Instalar aplicación» o «Añadir a la pantalla principal», si está disponible.
+4. Para tareas guardadas en diferentes dispositivos, se necesitaría sincronización futura: esta versión guarda los datos solo en cada navegador.
+
+DATOS Y LIMITACIONES
+- Los datos están en localStorage del navegador. Si borras datos del sitio o cambias de móvil, podrías perderlos: exporta respaldos con el icono de engrane.
+- Todavía NO manda notificaciones cuando la aplicación está cerrada. Esto requiere una fase posterior con permisos y un sistema de notificaciones.
+- Las repeticiones no tienen fecha final en esta primera versión. Puedes editar o eliminar la serie.
+- La versión de archivo único mi-semana-v1-demo.html sirve para abrir o inspeccionar la interfaz; para instalar de forma fiable la PWA, usa el sitio HTTPS publicado.
+
+Archivos principales: index.html, styles.css, app.js, manifest.webmanifest, sw.js, icons/*.

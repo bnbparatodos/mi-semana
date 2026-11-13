@@ -28,6 +28,7 @@
 
     <nav class="tabs" aria-label="Secciones">
       <button class="tab is-active" data-view="calendar"><span class="tab-icon">▦</span> Calendario</button>
+      <button class="tab" data-view="reservations"><span class="tab-icon">⌂</span> Reservas</button>
       <button class="tab" data-view="pending"><span class="tab-icon">☑</span> Pendientes <span id="pendingCount" class="tab-count" hidden></span></button>
       <button class="tab" data-view="shopping"><span class="tab-icon">◧</span> Compras</button>
       <button class="tab" data-view="templates"><span class="tab-icon">☆</span> Guardadas</button>
@@ -53,6 +54,10 @@
         <div class="calendar-footnote"><span class="legend-dot"></span> Las tareas repetidas aparecerán automáticamente en sus próximos días.</div>
       </section>
 
+      <section id="reservationsView" class="view" hidden>
+        <div class="section-heading"><div><div class="eyebrow">ALOJAMIENTOS</div><h1>Reservas</h1><p>Crea la reserva y se agendan check-in, check-out y limpieza.</p></div><button id="newReservation" class="primary">+ Reserva</button></div>
+        <div id="reservationsList" class="item-list reservations-list"></div>
+      </section>
       <section id="pendingView" class="view" hidden>
         <div class="section-heading"><div><div class="eyebrow">SIN FECHA</div><h1>Pendientes</h1><p>Anota lo que tienes que hacer, aunque todavía no sepas cuándo.</p></div></div>
         <form id="pendingForm" class="quick-inline" novalidate><input id="pendingInput" placeholder="Ej. Comprar pintura para la obra" maxlength="150" required aria-label="Nuevo pendiente"/><button class="primary" type="submit">Agregar</button></form>

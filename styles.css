@@ -173,3 +173,35 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
  .multiday-event{font-size:9px;padding:1px 3px}
  .modal{max-height:94dvh!important}.modal-body{padding-bottom:25px}
 }
+
+/* MI SEMANA 1.5 · Reservas vinculadas, calendario manipulable, edición compacta */
+.tabs{gap:3px}.tab{padding-left:12px;padding-right:12px}
+.reservation-card{border:1px solid var(--border);border-radius:13px;background:#fffefa;padding:12px 14px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.reservation-card b{font-size:14px;color:#174e38}.reservation-card small{display:block;margin-top:5px;color:#78857a;font-size:11px}
+.reservation-meta{font-size:12px;color:#516b59;margin-top:5px}.reservations-list{max-width:850px}
+.editor-compact{width:min(92vw,500px)}.editor-compact .modal-head{padding:13px 16px 6px}
+.editor-compact .modal-body{padding:9px 16px 18px}
+.editor-compact .modal-body>label.field,.editor-compact .modal-body>div[data-time-field]>label.field,.editor-compact .modal-body .compact-fields>label.field{display:grid;grid-template-columns:105px 1fr;gap:8px;align-items:center;margin-bottom:9px;font-size:12px}
+.editor-compact .modal-body input:not([type=checkbox]),.editor-compact .modal-body select{min-height:35px;padding:6px 9px;border-radius:9px;font-size:14px}
+.editor-compact .palette-field{margin:6px 0 9px}.editor-compact .palette-field legend{margin-bottom:3px}
+.editor-compact .palette-choices{gap:3px}.editor-compact .palette-choice{min-height:30px}.editor-compact .palette-dot{width:26px;height:26px}
+.editor-compact .task-type-field{margin:7px 0}.editor-compact .task-type-field legend{margin-bottom:6px}
+.editor-compact .task-type-choices span{min-height:30px;font-size:11px;padding:5px}
+.editor-compact .modal-body .form-row{gap:9px}.editor-compact .modal-body .form-row .field{margin-bottom:7px}
+.editor-compact .checkbox-row{margin:7px 0 10px}.editor-compact .modal-actions{margin-top:7px}
+.editor-compact .duration-info,.editor-compact .hint{margin:4px 0 7px}
+.editor-compact .modal-body .recur-fields{padding:8px;margin:0 0 9px}
+.compact-fields{display:grid;grid-template-columns:1fr;gap:0}
+.compact-fields label.field{display:grid!important;grid-template-columns:105px minmax(0,1fr);align-items:center;gap:8px;margin:0 0 7px}
+.compact-fields .full{grid-column:1/-1}
+.duration-presets{display:flex;gap:4px;flex-wrap:wrap;margin:5px 0 8px}
+.duration-presets button{padding:5px 7px;font-size:11px;font-weight:650;border:1px solid #d9e4d9;border-radius:8px;background:#fff;color:#406b4f}
+.duration-presets button.selected{background:#e7f1e8;border-color:#488f62;color:#174c37}
+.template-search{width:100%;border:1px solid #dbe5d9;border-radius:9px;padding:9px;margin-bottom:8px;font-size:13px}
+.slot-template[hidden]{display:none!important}
+.event{touch-action:none;user-select:none}.event .resize-grip{display:none;position:absolute;left:20%;right:20%;bottom:0;height:9px;border-top:2px solid currentColor;opacity:.5;cursor:ns-resize}
+.event:not(.instant) .resize-grip{display:block}
+.event.dragging{outline:2px dashed #bf9746;opacity:.75;touch-action:none!important;z-index:10}
+.drag-preview{position:fixed;z-index:1000;pointer-events:none;background:#15543e;color:white;border-radius:8px;padding:6px 9px;font-size:12px;box-shadow:0 3px 10px #172d2370;white-space:nowrap}
+.toast-action{display:flex;gap:14px;align-items:center;justify-content:space-between;white-space:normal;max-width:min(96vw,390px)}.toast-action button{border:0;border-radius:8px;background:#dbb65e;color:#103d2d;padding:7px 10px;font-weight:800}
+@media (max-width:600px){.tabs{gap:1px}.tab{padding:8px 5px;font-size:10px;gap:3px}.tab-icon{font-size:12px}.editor-compact .modal{max-height:calc(100dvh - 26px);padding-bottom:env(safe-area-inset-bottom)}.editor-compact .modal-body{padding:8px 13px 14px}.editor-compact .modal-body>label.field,.editor-compact .modal-body>div[data-time-field]>label.field,.compact-fields label.field{grid-template-columns:90px minmax(0,1fr)}}

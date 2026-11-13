@@ -17,6 +17,10 @@
   const minute = t => {const m=/^(\d{1,2}):(\d{2})$/.exec(String(t || ''));return m?Number(m[1])*60+Number(m[2]):9*60};
   const timeText = mins => String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0');
   const defaultData = () => ({ events: [], pending: [], shopping: [], templates: [], completed: {}, skipped: {}, overrides: {}, defaultsSeededV13: false });
+  // Reservas y tareas vinculadas usan el mismo almacén existente para mantener respaldos antiguos.
+  const PROPERTY_MAP={biu:{name:'Biu',color:'naranja'},capechik:{name:'Capechik',color:'azul'},moroli:{name:'Moroli',color:'turquesa'},libelula:{name:'Libélula',color:'beige'}};
+  const noRepeat=()=>({type:'none',every:2,days:[]});
+  const cleanNumber=n=>Number.isFinite(Number(n))?Number(n):0;
   const safeClock = (clock, fallback) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(clock||'')) ? clock : fallback;
   const legacyMulti = x => eventKind(x)==='multiday' && !x.endTime;
   const multiStartTime = x => legacyMulti(x) ? '00:00' : safeClock(x?.start, '15:00');
@@ -59,9 +63,10 @@
         <label><input type="radio" name="kind" value="instant" ${kind==='instant'?'checked':''}><span>Recordatorio</span></label>
         <label><input type="radio" name="kind" value="multiday" ${kind==='multiday'?'checked':''}><span>Varios días</span></label>
       </div></fieldset>
-      <div class="duration-edit form-row" data-kind-area="timed" ${kind!=='timed'?'hidden':''}>
-        <label class="field">Horas<input type="number" name="durationHours" inputmode="numeric" min="0" max="23" step="1" value="${h}" /></label>
-        <label class="field">Minutos<input type="number" name="durationMinutes" inputmode="numeric" min="0" max="59" step="1" value="${m}" /></label>
+      <div data-kind-area="timed" ${kind!=='timed'?'hidden':''}>
+        <div class="duration-presets" aria-label="Duraciones habituales">${[10,15,30,45,60,90,120,150,180].map(n=>`<button type="button" data-duration="${n}">${n<60?n+'m':(Math.floor(n/60)+'h'+(n%60?' '+n%60+'m':''))}</button>`).join('')}</div>
+        <div class="duration-edit form-row"><label class="field">Horas<input type="number" name="durationHours" inputmode="numeric" min="0" max="23" step="1" value="${h}" /></label>
+          <label class="field">Minutos<input type="number" name="durationMinutes" inputmode="numeric" min="0" max="59" step="1" value="${m}" /></label></div>
       </div>
       <p class="duration-info" data-kind-area="instant" ${kind!=='instant'?'hidden':''}>Aparecerá como un aviso pequeño a la hora elegida, sin ocupar una franja larga.</p>
       <div data-kind-area="multiday" ${kind!=='multiday'?'hidden':''}>
@@ -83,6 +88,10 @@
         if(end && (!end.value || end.value<form.elements.date.value)) end.value=addDays(form.elements.date.value||toISO(new Date()),2);
       }
     }
+    form.querySelectorAll('[data-duration]').forEach(b=>b.addEventListener('click',()=>{
+      const n=Number(b.dataset.duration);form.elements.durationHours.value=Math.floor(n/60);form.elements.durationMinutes.value=n%60;
+      form.querySelectorAll('[data-duration]').forEach(x=>x.classList.toggle('selected',x===b));
+    }));
     form.querySelectorAll('input[name=kind]').forEach(r=>r.addEventListener('change',refresh));
     if(!isTemplate)form.elements.date.addEventListener('change',refresh);
     refresh();
@@ -125,6 +134,51 @@
   const ui = {view:'calendar',selectedDate:toISO(new Date()),weekStart:monday(toISO(new Date())),templateDate:toISO(new Date())};
   const dialog=$('dialog'), content=$('dialogContent');
   function save() {try {localStorage.setItem(KEY,JSON.stringify(data))} catch(e){alert('No se pudieron guardar los cambios. Exporta un respaldo y revisa el espacio disponible.')} }
+  let undoSnapshot=null;
+  function rememberUndo(){undoSnapshot=JSON.stringify(data)}
+  function toastUndo(message){
+    document.querySelector('.toast')?.remove();const t=document.createElement('div');t.className='toast toast-action';
+    const span=document.createElement('span');span.textContent=message;
+    const button=document.createElement('button');button.type='button';button.textContent='Deshacer';
+    button.addEventListener('click',()=>{if(!undoSnapshot)return;data=JSON.parse(undoSnapshot);undoSnapshot=null;save();render();t.remove()});
+    t.append(span,button);document.body.append(t);setTimeout(()=>t.remove(),5200);
+  }
+  const linkedFor = id => data.events.filter(x=>x.linkedReservationId===id);
+  function syncReservationChildren(reservation){
+    const p=PROPERTY_MAP[reservation.property]||{name:reservation.property||'Reserva',color:colorOf(reservation.color)};
+    const base=[
+      {role:'checkin',title:'Check-in '+p.name,date:reservation.date,start:multiStartTime(reservation),kind:'instant',duration:0},
+      {role:'checkout',title:'Check-out '+p.name,date:safeEndDate(reservation),start:multiEndTime(reservation),kind:'instant',duration:0},
+      {role:'cleaning',title:'Limpieza '+p.name,date:safeEndDate(reservation),start:reservation.cleaningTime||'11:00',kind:'timed',duration:reservation.cleaningDuration||60}
+    ];
+    for(const item of base){
+      const existing=data.events.find(e=>e.linkedReservationId===reservation.id&&e.linkedRole===item.role);
+      if(item.role==='cleaning' && reservation.includeCleaning===false){if(existing)data.events=data.events.filter(e=>e.id!==existing.id);continue}
+      if(existing){if(!existing.linkedCustomized) Object.assign(existing,item,{color:reservation.color,repeat:noRepeat()});}
+      else data.events.push({id:uid(),...item,color:reservation.color,repeat:noRepeat(),linkedReservationId:reservation.id,linkedRole:item.role,linkedCustomized:false});
+    }
+  }
+  function addReservation(res){data.events.push(res);syncReservationChildren(res);save()}
+  function removeReservation(res){const ids=new Set([res.id,...linkedFor(res.id).map(x=>x.id)]);data.events=data.events.filter(e=>!ids.has(e.id));for(const key of ['completed','skipped','overrides'])for(const k of Object.keys(data[key]))if(ids.has(k.split('@')[0]))delete data[key][k];save()}
+  function visibleOccurrence(event,date){
+    const rep=normalizeRepeat(event.repeat),base=rep.type==='none'?[event.date]:null;
+    const keys=Object.entries(data.overrides).filter(([k])=>k.startsWith(event.id+'@'));
+    const movingIn=keys.filter(([key,o])=>(o.date||key.split('@')[1])===date&&key.split('@')[1]!==date).map(([key,o])=>({ ...event,occDate:key.split('@')[1],displayDate:date,start:safeClock(o.start,event.start||'09:00'),duration:o.duration??event.duration }));
+    const local=data.overrides[event.id+'@'+date];
+    const localEvent=occurs(event,date)&&!(local?.date&&local.date!==date)?[{...event,occDate:date,displayDate:date,start:safeClock(local?.start,event.start||'09:00'),duration:local?.duration??event.duration}]:[];
+    return [...localEvent,...movingIn];
+  }
+  function updateOccurrence(event,origDate,newDate,newTime,newDuration){
+    rememberUndo();
+    if(normalizeRepeat(event.repeat).type==='none' && !event.linkedReservationId){
+      event.date=newDate;event.start=newTime;event.duration=newDuration;
+    } else {
+      const key=event.id+'@'+origDate;
+      data.overrides[key]={...(data.overrides[key]||{}),date:newDate,start:newTime,duration:newDuration};
+      if(event.linkedReservationId)event.linkedCustomized=true;
+    }
+    save();renderCalendar();toastUndo('Horario actualizado');
+  }
   function repeatLabel(rep) {
     const r=normalizeRepeat(rep);
     if(r.type==='interval')return r.every===1?'Todos los días':`Cada ${r.every} días`;
@@ -188,7 +242,7 @@
   }
   function renderTabs() {
     document.querySelectorAll('.tab').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.view===ui.view));
-    for (const name of ['calendar','pending','shopping','templates']) $(name+'View').hidden=ui.view!==name;
+    for (const name of ['calendar','reservations','pending','shopping','templates']) $(name+'View').hidden=ui.view!==name;
     const remaining=data.pending.filter(x=>!x.done).length;
     const counter=$('pendingCount');counter.hidden=!remaining;counter.textContent=remaining>99?'99+':remaining;
   }
@@ -209,6 +263,7 @@
   function render() {
     renderTabs();
     if(ui.view==='calendar')renderCalendar();
+    if(ui.view==='reservations')renderReservations();
     if(ui.view==='pending')renderPending();
     if(ui.view==='shopping')renderShopping();
     if(ui.view==='templates')renderTemplates();
@@ -223,7 +278,7 @@
     const dates=Array.from({length:7},(_,i)=>addDays(start,i));
     const scroller=$('calendarScroller');
     const oldX=scroller.scrollLeft,oldY=scroller.scrollTop,wasRendered=!!scroller.querySelector('.calendar-table');
-    const events=dates.map(date=>data.events.filter(e=>eventKind(e)!=='multiday' && occurs(e,date)).map(e=>({...e,occDate:date,start:safeClock(data.overrides[e.id+'@'+date]?.start,e.start||'09:00')})));
+    const events=dates.map(date=>data.events.filter(e=>eventKind(e)!=='multiday').flatMap(e=>visibleOccurrence(e,date)));
     let startHour=6,endHour=23;
     for(const daily of events)for(const e of daily){startHour=Math.min(startHour,Math.floor(minute(e.start)/60));endHour=Math.max(endHour,Math.ceil((minute(e.start)+(eventKind(e)==='instant'?20:durationMinutes(e)))/60));}
     startHour=Math.max(0,startHour);endHour=Math.min(24,Math.max(endHour,startHour+1));
@@ -261,7 +316,7 @@
           const top=Math.max(0,(x.start-startHour*60)/60*GRID_HOUR);
           const h=Math.min(height-top,instant?27:Math.max(25,durationMinutes(e)/60*GRID_HOUR-3));
           const done=isDone(e.id,date),left=x.lane/lanes*100,width=100/lanes;
-          blocks+=`<button class="event ${instant?'instant':''} ${done?'done':''}" type="button" data-color="${colorOf(e.color)}" data-event="${esc(e.id)}" data-date="${date}" style="top:${top}px;height:${h}px;left:calc(${left}% + 4px);right:auto;width:calc(${width}% - 8px)" title="${esc(e.title)} · ${esc(e.start)}"><small>${instant?'◆ ':''}${esc(e.start)}${normalizeRepeat(e.repeat).type!=='none'?'<span class="repeat-mark">↻</span>':''}${done?' ✓':''}</small><strong>${esc(e.title)}</strong></button>`;
+          blocks+=`<button class="event ${instant?'instant':''} ${done?'done':''}" type="button" data-color="${colorOf(e.color)}" data-event="${esc(e.id)}" data-date="${esc(e.occDate||date)}" data-display-date="${date}" style="top:${top}px;height:${h}px;left:calc(${left}% + 4px);right:auto;width:calc(${width}% - 8px)" title="${esc(e.title)} · ${esc(e.start)}"><small>${instant?'◆ ':''}${esc(e.start)}${normalizeRepeat(e.repeat).type!=='none'?'<span class="repeat-mark">↻</span>':''}${done?' ✓':''}</small><strong>${esc(e.title)}</strong><span class="resize-grip" aria-hidden="true"></span></button>`;
         }
       }
       let nowLine='';
@@ -277,13 +332,64 @@
       ui.selectedDate=col.dataset.date;ui.templateDate=col.dataset.date;
       openSlotChooser(col.dataset.date,timeText(minutes));
     }));
-    scroller.querySelectorAll('[data-event]').forEach(btn=>btn.addEventListener('click',ev=>{ev.stopPropagation();openOccurrence(btn.dataset.event,btn.dataset.date)}));
+    scroller.querySelectorAll('[data-event]').forEach(btn=>{
+      btn.addEventListener('click',ev=>{ev.stopPropagation();if(btn.dataset.suppressClick==='1'){btn.dataset.suppressClick='';return;}openOccurrence(btn.dataset.event,btn.dataset.date)});
+      if(btn.classList.contains('event'))enableDragAndResize(btn);
+    });
     if(wasRendered){scroller.scrollLeft=oldX;scroller.scrollTop=oldY}
     else {let idx=dates.indexOf(ui.selectedDate);if(idx<0)idx=0;
       const firstCol=scroller.querySelector('.day-col');
       scroller.scrollLeft=scroller.scrollWidth>scroller.clientWidth+4?Math.max(0,idx*(firstCol?.getBoundingClientRect().width||114)):0;
       const reference=ui.weekStart===monday(today)?new Date().getHours():9;
       scroller.scrollTop=Math.max(0,(Math.min(reference,23)-startHour)*GRID_HOUR-42)}
+  }
+  function enableDragAndResize(el){
+    let hold=null,active=false,pointer=null,origin=null,mode='move',ghost=null,moveDate='',moveMinutes=0,moveDuration=0;
+    const cancel=()=>{clearTimeout(hold);if(ghost){ghost.remove();ghost=null}active=false;el.classList.remove('dragging')};
+    el.addEventListener('pointerdown',e=>{
+      if(e.button!==0 || dialog.open)return;
+      const event=data.events.find(x=>x.id===el.dataset.event);if(!event||eventKind(event)==='multiday')return;
+      mode=e.target.closest('.resize-grip')?'resize':'move';pointer=e.pointerId;
+      const fromDate=el.dataset.date,date=el.dataset.displayDate||fromDate;
+      const o=data.overrides[event.id+'@'+fromDate];
+      origin={event,fromDate,date,start:safeClock(o?.start,event.start||'09:00'),duration:o?.duration??event.duration,x:e.clientX,y:e.clientY};
+      moveDate=date;moveMinutes=minute(origin.start);moveDuration=eventKind(event)==='instant'?0:durationMinutes({duration:origin.duration});
+      clearTimeout(hold);hold=setTimeout(()=>{
+        active=true;el.classList.add('dragging');el.setPointerCapture(pointer);
+        ghost=document.createElement('div');ghost.className='drag-preview';document.body.appendChild(ghost);
+        updateGhost(e.clientX,e.clientY);
+      },mode==='resize'?100:320);
+    });
+    function updateGhost(x,y){if(!ghost)return;ghost.textContent=(mode==='resize'?'Duración ':'Mover ')+timeText(moveMinutes)+(mode==='resize'?' · '+Math.floor(moveDuration/60)+'h '+moveDuration%60+'min':' · '+moveDate);ghost.style.left=Math.min(innerWidth-200,x+12)+'px';ghost.style.top=Math.max(4,y-42)+'px'}
+    el.addEventListener('pointermove',e=>{
+      if(e.pointerId!==pointer||!origin)return;
+      if(!active){if(Math.abs(e.clientY-origin.y)>9||Math.abs(e.clientX-origin.x)>9){clearTimeout(hold)}return}
+      e.preventDefault();const hourStart=Number($('calendarScroller').dataset.startHour||6);
+      if(mode==='resize'){
+        const delta=Math.round((e.clientY-origin.y)/GRID_HOUR*4)*15;
+        moveDuration=Math.max(15,Math.min(1439,durationMinutes({duration:origin.duration})+delta));
+      }else{
+        const cols=[...document.querySelectorAll('.day-col')];
+        const center=cols.find(c=>{const r=c.getBoundingClientRect();return e.clientX>=r.left&&e.clientX<=r.right});
+        if(center)moveDate=center.dataset.date;
+        const current=cols.find(c=>c.dataset.date===moveDate)||cols[0];
+        if(current){const rect=current.getBoundingClientRect();moveMinutes=Math.max(0,Math.min(1439,Math.round(((e.clientY-rect.top)/GRID_HOUR*60+hourStart*60)/15)*15));}
+      }
+      updateGhost(e.clientX,e.clientY);
+    });
+    el.addEventListener('pointerup',e=>{
+      if(e.pointerId!==pointer)return;
+      clearTimeout(hold);const changed=active && (moveDate!==origin?.date||moveMinutes!==minute(origin?.start)||moveDuration!==origin?.duration);
+      if(active){el.dataset.suppressClick='1';setTimeout(()=>{el.dataset.suppressClick=''},500)}
+      const previous=origin;cancel();origin=null;
+      if(changed && previous)updateOccurrence(previous.event,previous.fromDate,mode==='resize'?previous.date:moveDate,mode==='resize'?previous.start:timeText(moveMinutes),moveDuration);
+    });
+    el.addEventListener('pointercancel',()=>{cancel();origin=null});
+  }
+  function renderReservations(){
+    const list=data.events.filter(e=>eventKind(e)==='multiday').sort((a,b)=>a.date.localeCompare(b.date));
+    $('reservationsList').innerHTML=list.length?list.map(e=>`<article class="reservation-card"><div><span class="task-color-dot color-${colorOf(e.color)}"></span><b>${esc(e.title)}</b><div class="reservation-meta">${esc(e.date)} ${esc(multiStartTime(e))} → ${esc(safeEndDate(e))} ${esc(multiEndTime(e))}</div><small>${e.reservation?'Check-in, check-out'+(e.includeCleaning===false?'':' y limpieza')+' vinculados':'Evento antiguo de varios días'}</small></div><button class="ghost" data-res-edit="${esc(e.id)}">Editar</button></article>`).join(''):'<div class="empty-state"><b>Sin reservas todavía</b>Crea una y el check-in, el check-out y la limpieza aparecerán automáticamente.</div>';
+    $('reservationsList').querySelectorAll('[data-res-edit]').forEach(el=>el.addEventListener('click',()=>{const e=data.events.find(x=>x.id===el.dataset.resEdit);if(e)openReservationForm(e)}));
   }
   function selectDay(date) {
     ui.selectedDate=date;
@@ -332,20 +438,21 @@
   function openSlotChooser(date,time){
     const choices=data.templates.map(t=>`<button type="button" class="slot-template" data-choose-template="${esc(t.id)}"><span class="task-color-dot color-${colorOf(t.color)}"></span><span class="slot-template-copy"><b>${esc(t.title)}</b><small>${esc(durationLabel(t))} · ${eventKind(t)==='multiday'?'varios días':esc(t.start||'09:00')}</small></span><span class="slot-plus">+</span></button>`).join('');
     showDialog(`<div class="modal">${modalHeader('Agregar a esta hora')}<div class="modal-body">
-      <div class="slot-summary">${esc(dayLong(date))} · <b>${esc(time)}</b></div>
-      ${choices?`<p class="slot-section-label">Toca una tarea guardada para agendarla aquí:</p><div class="slot-template-list">${choices}</div>`:'<p class="slot-empty">No tienes tareas guardadas todavía. Puedes crear una nueva ahora.</p>'}
+      <div class="slot-summary">${esc(dayLong(date))} ${time?'· <b>'+esc(time)+'</b>':'· usa la hora guardada'}</div>
+      ${choices?`<p class="slot-section-label">Elige una tarea y quedará agendada:</p><input class="template-search" id="templateSearch" placeholder="Buscar limpieza, check-in..." aria-label="Buscar tareas guardadas"><div class="slot-template-list">${choices}</div>`:'<p class="slot-empty">No tienes tareas guardadas todavía. Puedes crear una nueva ahora.</p>'}
       <button type="button" class="slot-create" id="newTaskHere"><span>＋</span> Crear nueva tarea aquí</button>
     </div></div>`);
+    content.querySelector('#templateSearch')?.addEventListener('input',e=>{const q=e.target.value.toLowerCase();content.querySelectorAll('[data-choose-template]').forEach(b=>b.hidden=!b.textContent.toLowerCase().includes(q))});
     content.querySelectorAll('[data-choose-template]').forEach(btn=>btn.addEventListener('click',()=>{
       const t=data.templates.find(x=>x.id===btn.dataset.chooseTemplate);
       if(!t)return;
-      closeDialog();addFromTemplate(t,{date,time});
+      closeDialog();addFromTemplate(t,{date,...(time?{time}:{})});
     }));
-    content.querySelector('#newTaskHere').addEventListener('click',()=>{closeDialog();openTaskForm({date,time})});
+    content.querySelector('#newTaskHere').addEventListener('click',()=>{closeDialog();openTaskForm({date,time:time||'09:00'})});
   }
   function openQuickAdd(){
-    showDialog(`<div class="modal">${modalHeader('¿Qué quieres agregar?')}<div class="modal-body"><button class="action-option" data-kind="task"><span class="option-glyph">▦</span><span>Tarea en el calendario<small>Con fecha y hora, o repetida</small></span></button><button class="action-option" data-kind="pending"><span class="option-glyph">☑</span><span>Pendiente sin fecha<small>Para hacer cuando puedas</small></span></button><button class="action-option" data-kind="shopping"><span class="option-glyph">◧</span><span>Algo que comprar<small>Se añade a tu lista de compras</small></span></button><button class="action-option" data-kind="template"><span class="option-glyph">☆</span><span>Tarea guardada<small>Hora y repetición predeterminadas</small></span></button></div></div>`);
-    content.querySelectorAll('[data-kind]').forEach(btn=>btn.addEventListener('click',()=>{const kind=btn.dataset.kind;closeDialog();if(kind==='task')openTaskForm();if(kind==='template')openTemplateForm();if(kind==='pending')openSmallEntry('pending');if(kind==='shopping')openSmallEntry('shopping')}));
+    showDialog(`<div class="modal">${modalHeader('¿Qué quieres agregar?')}<div class="modal-body"><button class="action-option" data-kind="reservation"><span class="option-glyph">⌂</span><span>Reserva<small>Crea check-in, check-out y limpieza</small></span></button><button class="action-option" data-kind="saved"><span class="option-glyph">☆</span><span>Agendar tarea guardada<small>Elige una con un toque</small></span></button><button class="action-option" data-kind="task"><span class="option-glyph">▦</span><span>Tarea en el calendario<small>Con fecha y hora, o repetida</small></span></button><button class="action-option" data-kind="pending"><span class="option-glyph">☑</span><span>Pendiente sin fecha<small>Para hacer cuando puedas</small></span></button><button class="action-option" data-kind="shopping"><span class="option-glyph">◧</span><span>Algo que comprar<small>Se añade a tu lista de compras</small></span></button><button class="action-option" data-kind="copyday"><span class="option-glyph">⧉</span><span>Copiar día o semana<small>Repetir programación sin escribirla</small></span></button><button class="action-option" data-kind="template"><span class="option-glyph">☆</span><span>Tarea guardada<small>Hora y repetición predeterminadas</small></span></button></div></div>`);
+    content.querySelectorAll('[data-kind]').forEach(btn=>btn.addEventListener('click',()=>{const kind=btn.dataset.kind;closeDialog();if(kind==='copyday')openCopySchedule();if(kind==='reservation')openReservationForm();if(kind==='saved')openSlotChooser(ui.selectedDate,null);if(kind==='task')openTaskForm();if(kind==='template')openTemplateForm();if(kind==='pending')openSmallEntry('pending');if(kind==='shopping')openSmallEntry('shopping')}));
   }
   function openSmallEntry(kind){
     const label=kind==='pending'?'Pendiente sin fecha':'Agregar compra';
@@ -353,6 +460,54 @@
     content.querySelector('[data-close2]').addEventListener('click',closeDialog);
     content.querySelector('form').addEventListener('submit',e=>{e.preventDefault();const text=e.target.elements.text.value.trim();if(!text)return;data[kind].push({id:uid(),text,done:false});save();closeDialog();setView(kind);toast('Agregado')});
     content.querySelector('input').focus();
+  }
+  function openReservationForm(existing=null){
+    const isEdit=!!existing;
+    const today=ui.selectedDate;
+    const oldP=existing?.property||'biu';
+    const startDate=existing?.date||today,endDate=existing?.endDate||addDays(startDate,2);
+    showDialog(`<div class="modal editor-compact">${modalHeader(isEdit?'Editar reserva':'Nueva reserva')}<form id="reservationForm" class="modal-body compact-fields" novalidate>
+      <label class="field">Alojamiento<select name="property">${Object.entries(PROPERTY_MAP).map(([key,p])=>`<option value="${key}" ${oldP===key?'selected':''}>${p.name}</option>`).join('')}</select></label>
+      <label class="field">Nombre / referencia (opcional)<input name="label" placeholder="Ej. Reserva de Ana" value="${esc(existing?.label||'')}"></label>
+      <label class="field">Entrada (fecha)<input name="date" type="date" required value="${esc(startDate)}"></label>
+      <label class="field">Check-in<input name="start" type="time" required value="${esc(existing?multiStartTime(existing):'15:00')}"></label>
+      <label class="field">Salida (fecha)<input name="endDate" type="date" required value="${esc(endDate)}"></label>
+      <label class="field">Check-out<input name="endTime" type="time" required value="${esc(existing?multiEndTime(existing):'10:00')}"></label>
+      <label class="checkbox-row full"><input type="checkbox" name="includeCleaning" ${existing?.includeCleaning===false?'':'checked'}> Programar limpieza automáticamente</label>
+      <div class="form-row full" id="cleaningOptions"><label class="field">Hora limpieza<input name="cleaningTime" type="time" value="${esc(existing?.cleaningTime||'11:00')}"></label><label class="field">Duración (min)<input name="cleaningDuration" type="number" min="1" max="1439" value="${esc(existing?.cleaningDuration??60)}"></label></div>
+      <p class="hint full">Se crea una barra superior y solo dos avisos puntuales en el horario: check-in y check-out. La limpieza queda vinculada y editable.</p>
+      <div class="modal-actions full"><button class="ghost" type="button" data-cancel>Cancelar</button><button class="primary" type="submit">${isEdit?'Guardar reserva':'Agregar reserva'}</button></div>
+      ${isEdit?'<button type="button" class="danger full" data-delete-res>Eliminar reserva y tareas vinculadas</button>':''}
+    </form></div>`);
+    const f=content.querySelector('#reservationForm');
+    const refresh=()=>{f.querySelector('#cleaningOptions').hidden=!f.elements.includeCleaning.checked};
+    f.elements.includeCleaning.addEventListener('change',refresh);refresh();
+    content.querySelector('[data-cancel]').addEventListener('click',closeDialog);
+    f.addEventListener('submit',e=>{
+      e.preventDefault();const p=PROPERTY_MAP[f.elements.property.value],date=f.elements.date.value,last=f.elements.endDate.value,st=f.elements.start.value,et=f.elements.endTime.value;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^\d{4}-\d{2}-\d{2}$/.test(last)||last<date){toast('Revisa las fechas de la reserva');return}
+      if(dayDelta(date,last)>729){toast('Máximo 730 días');return}
+      if(last===date&&minute(et)<=minute(st)){toast('La salida debe ser posterior a la entrada');return}
+      const label=f.elements.label.value.trim();const duration=Number(f.elements.cleaningDuration.value);
+      if(f.elements.includeCleaning.checked&&(!Number.isInteger(duration)||duration<1||duration>1439)){toast('Duración de limpieza no válida');return}
+      rememberUndo();
+      const next={...(existing||{}),id:existing?.id||uid(),kind:'multiday',reservation:true,title:label||'Reserva '+p.name,label,property:f.elements.property.value,date,endDate:last,start:st,endTime:et,color:p.color,duration:0,repeat:noRepeat(),includeCleaning:f.elements.includeCleaning.checked,cleaningTime:f.elements.cleaningTime.value,cleaningDuration:duration};
+      if(existing)Object.assign(existing,next);else data.events.push(next);
+      syncReservationChildren(existing||next);save();closeDialog();ui.selectedDate=date;ui.templateDate=date;ui.weekStart=monday(date);setView('calendar');toastUndo(isEdit?'Reserva actualizada':'Reserva y tareas agregadas');
+    });
+    content.querySelector('[data-delete-res]')?.addEventListener('click',()=>{if(!confirm('¿Eliminar reserva, check-in, check-out y limpieza vinculados?'))return;rememberUndo();removeReservation(existing);closeDialog();render();toastUndo('Reserva eliminada')});
+  }
+  function openCopySchedule(){
+    showDialog(`<div class="modal editor-compact">${modalHeader('Copiar programación')}<form class="modal-body compact-fields" id="copyScheduleForm"><label class="field">Copiar<select name="mode"><option value="day">Un día</option><option value="week">Una semana</option></select></label><label class="field">Desde<input type="date" name="from" value="${ui.selectedDate}" required></label><label class="field">Hacia<input type="date" name="to" value="${addDays(ui.selectedDate,7)}" required></label><p class="hint full">Solo copia tareas puntuales; no duplica reservas ni series repetitivas.</p><div class="modal-actions full"><button class="ghost" type="button" data-cancel>Cancelar</button><button type="submit" class="primary">Copiar</button></div></form></div>`);
+    const form=content.querySelector('#copyScheduleForm');content.querySelector('[data-cancel]').addEventListener('click',closeDialog);
+    form.addEventListener('submit',e=>{e.preventDefault();const from=form.elements.from.value,to=form.elements.to.value,number=form.elements.mode.value==='week'?7:1;
+      if(!from||!to)return;let added=0;rememberUndo();const newItems=[];
+      for(let n=0;n<number;n++){const oldDate=addDays(from,n),newDate=addDays(to,n);
+        for(const ev of data.events.filter(x=>eventKind(x)!=='multiday'&&!x.linkedReservationId&&normalizeRepeat(x.repeat).type==='none'&&x.date===oldDate)){
+          newItems.push({...ev,id:uid(),date:newDate});added++;
+        }
+      }data.events.push(...newItems);save();closeDialog();ui.selectedDate=to;ui.weekStart=monday(to);setView('calendar');toastUndo(added+' tareas copiadas');
+    });
   }
   function openTaskForm(args={}){
     const event=args.event||null,t=args.template||null;
@@ -364,11 +519,12 @@
     const endDate=event?.endDate||addDays(date,2);
     const repeat=normalizeRepeat(event?.repeat||t?.repeat);
     const editing=!!event;
-    showDialog(`<div class="modal">${modalHeader(editing?'Editar tarea':'Nueva tarea')}<form id="taskForm" class="modal-body" novalidate>
+    showDialog(`<div class="modal editor-compact">${modalHeader(editing?'Editar tarea':'Nueva tarea')}<form id="taskForm" class="modal-body" novalidate>
       <label class="field">Tarea<input type="text" name="title" maxlength="150" placeholder="Ej. Limpieza Capechik o Reserva Moroli" value="${esc(title)}" required autofocus /></label>
       <label class="field">Primer día<input type="date" name="date" value="${esc(date)}" required /></label>
       <div data-time-field><label class="field">Hora<input type="time" name="start" value="${esc(start)}" required /></label></div>
       ${kindControls(kind,duration,false,endDate,2,event && eventKind(event)==='multiday'?multiStartTime(event):'15:00',event && eventKind(event)==='multiday'?multiEndTime(event):'11:00')}
+      ${!editing ? '' : '<p class="hint compact-hint">Toca el nombre, hora o duración para cambiarlo.</p>'}
       ${colorControls(event?.color||t?.color)}
       <div data-recurrence-wrap>${repeatControls(repeat,date)}</div>
       ${!editing?`<label class="checkbox-row"><input type="checkbox" name="alsoTemplate" /> Guardar también como tarea habitual</label>`:repeat.type!=='none'?'<p class="hint">Editar esta tarea cambia toda su serie de repeticiones.</p>':''}
@@ -386,6 +542,7 @@
       const timing=readKind(form);if(!timing)return;
       const rep=timing.kind==='multiday'?normalizeRepeat(null):collectRepeat(form);if(!rep)return;
       const next={id:event?.id||uid(),title,date,start,repeat:rep,color:colorOf(form.elements.color.value),...timing};
+      if(event?.linkedReservationId){next.linkedReservationId=event.linkedReservationId;next.linkedRole=event.linkedRole;next.linkedCustomized=true}
       if(editing){const idx=data.events.findIndex(x=>x.id===event.id);if(idx<0)return;data.events[idx]=next}
       else data.events.push(next);
       if(!editing && form.elements.alsoTemplate?.checked){
@@ -435,18 +592,19 @@
     const done=isDone(id,day),recurring=eventKind(event)!=='multiday' && normalizeRepeat(event.repeat).type!=='none';
     showDialog(`<div class="modal">${modalHeader('Tu tarea')}<div class="modal-body">
       <div class="occ-summary"><b><span class="task-color-dot color-${colorOf(event.color)}"></span>${esc(event.title)}</b><span>${esc(dayLong(day))} · ${eventKind(event)==='multiday'?esc(dayLong(event.date)+' '+multiStartTime(event)+' → '+dayLong(safeEndDate(event))+' '+multiEndTime(event)):esc(safeClock(data.overrides[id+'@'+day]?.start,event.start))+' · '+esc(durationLabel(event))} ${recurring?'· ↻ '+esc(repeatLabel(event.repeat)):''}</span></div>
-      <div class="stack"><button class="primary" data-complete>${done?'↩ Marcar como pendiente':'✓ Marcar como hecha'}</button><button class="ghost" data-edit>Editar ${recurring?'toda la serie':'tarea'}</button>${recurring?'<button class="ghost" data-one-day>Modificar hora solo este día</button>':''}${recurring?'<button class="ghost" data-skip>Omitir solo este día</button>':''}<button class="danger" data-delete>${recurring?'Eliminar toda la serie':'Eliminar tarea'}</button></div>
+      <div class="stack"><button class="primary" data-complete>${done?'↩ Marcar como pendiente':'✓ Marcar como hecha'}</button><button class="ghost" data-edit>Editar ${recurring?'toda la serie':'tarea'}</button><button class="ghost" data-duplicate>Duplicar tarea</button>${recurring?'<button class="ghost" data-one-day>Modificar hora solo este día</button>':''}${recurring?'<button class="ghost" data-skip>Omitir solo este día</button>':''}<button class="danger" data-delete>${recurring?'Eliminar toda la serie':'Eliminar tarea'}</button></div>
     </div></div>`);
     content.querySelector('[data-complete]').addEventListener('click',()=>{const k=id+'@'+day;if(done)delete data.completed[k];else data.completed[k]=true;save();closeDialog();renderCalendar();toast(done?'Tarea pendiente':'Tarea completada')});
-    content.querySelector('[data-edit]').addEventListener('click',()=>{closeDialog();openTaskForm({event})});
+    content.querySelector('[data-edit]').addEventListener('click',()=>{closeDialog();eventKind(event)==='multiday'?openReservationForm(event):openTaskForm({event})});
+    content.querySelector('[data-duplicate]').addEventListener('click',()=>{rememberUndo();const original=data.overrides[id+'@'+day]||{};const copy={...event,id:uid(),date:original.date||day,start:original.start||event.start,duration:original.duration??event.duration,repeat:noRepeat()};delete copy.linkedReservationId;delete copy.linkedRole;delete copy.linkedCustomized;delete copy.reservation;data.events.push(copy);save();closeDialog();renderCalendar();toastUndo('Tarea duplicada')});
     content.querySelector('[data-one-day]')?.addEventListener('click',()=>{
       const original=data.overrides[id+'@'+day]?.start||event.start||'09:00';
-      showDialog(`<div class="modal">${modalHeader('Solo este día')}<form class="modal-body" id="overrideForm"><p class="slot-summary">${esc(event.title)} · ${esc(dayLong(day))}</p><label class="field">Nueva hora<input name="start" type="time" value="${esc(original)}" required /></label><div class="modal-actions"><button type="button" class="ghost" data-reset-override>Restaurar hora habitual</button><button type="submit" class="primary">Guardar</button></div></form></div>`);
-      content.querySelector('#overrideForm').addEventListener('submit',ev=>{ev.preventDefault();data.overrides[id+'@'+day]={start:ev.target.elements.start.value};save();closeDialog();renderCalendar();toast('Hora modificada solo para ese día')});
+      showDialog(`<div class="modal">${modalHeader('Solo este día')}<form class="modal-body" id="overrideForm"><p class="slot-summary">${esc(event.title)} · ${esc(dayLong(day))}</p><label class="field">Fecha<input name="date" type="date" value="${esc(data.overrides[id+'@'+day]?.date||day)}" required /></label><label class="field">Hora<input name="start" type="time" value="${esc(original)}" required /></label><label class="field">Duración (minutos)<input name="duration" type="number" min="1" max="1439" value="${Number(data.overrides[id+'@'+day]?.duration??event.duration??60)}" /></label><div class="modal-actions"><button type="button" class="ghost" data-reset-override>Restaurar hora habitual</button><button type="submit" class="primary">Guardar</button></div></form></div>`);
+      content.querySelector('#overrideForm').addEventListener('submit',ev=>{ev.preventDefault();data.overrides[id+'@'+day]={date:ev.target.elements.date.value,start:ev.target.elements.start.value,duration:Number(ev.target.elements.duration.value)};if(event.linkedReservationId)event.linkedCustomized=true;save();closeDialog();renderCalendar();toast('Solo esta ocurrencia actualizada')});
       content.querySelector('[data-reset-override]').addEventListener('click',()=>{delete data.overrides[id+'@'+day];save();closeDialog();renderCalendar();toast('Hora habitual restaurada')});
     });
     content.querySelector('[data-skip]')?.addEventListener('click',()=>{data.skipped[id+'@'+day]=true;delete data.completed[id+'@'+day];save();closeDialog();renderCalendar();toast('Se omitió solo este día')});
-    content.querySelector('[data-delete]').addEventListener('click',()=>{if(!confirm(recurring?'¿Borrar todas las repeticiones de esta tarea?':'¿Eliminar esta tarea?'))return;data.events=data.events.filter(e=>e.id!==id);for(const k of Object.keys(data.completed))if(k.startsWith(id+'@'))delete data.completed[k];for(const k of Object.keys(data.skipped))if(k.startsWith(id+'@'))delete data.skipped[k];for(const k of Object.keys(data.overrides))if(k.startsWith(id+'@'))delete data.overrides[k];save();closeDialog();renderCalendar()});
+    content.querySelector('[data-delete]').addEventListener('click',()=>{if(!confirm(recurring?'¿Borrar todas las repeticiones de esta tarea?':'¿Eliminar esta tarea?'))return;rememberUndo();if(eventKind(event)==='multiday'&&event.reservation){removeReservation(event);closeDialog();render();toastUndo('Reserva eliminada');return;}data.events=data.events.filter(e=>e.id!==id);for(const k of Object.keys(data.completed))if(k.startsWith(id+'@'))delete data.completed[k];for(const k of Object.keys(data.skipped))if(k.startsWith(id+'@'))delete data.skipped[k];for(const k of Object.keys(data.overrides))if(k.startsWith(id+'@'))delete data.overrides[k];save();closeDialog();renderCalendar();toastUndo('Tarea eliminada')});
   }
   function openSettings(){
     showDialog(`<div class="modal">${modalHeader('Respaldo y ajustes')}<div class="modal-body"><p style="font-size:13px;color:#6c7890;margin-bottom:18px">Tus tareas se guardan en este dispositivo, dentro del navegador. Para no perderlas al cambiar de teléfono o borrar los datos, descarga un respaldo.</p><div class="stack"><button class="primary" id="exportBtn">↓ Descargar respaldo (.json)</button><button class="ghost" id="importBtn">↑ Restaurar un respaldo</button></div><div class="divider-line"></div><p class="warning">Esta versión funciona sin cuenta y sin conexión después de instalarla. Todavía no envía notificaciones cuando la aplicación está cerrada.</p></div></div>`);
@@ -473,11 +631,12 @@
   $('landNextWeek').addEventListener('click',()=>$('nextWeek').click());
   $('landToday').addEventListener('click',()=>$('todayBtn').click());
   $('landSections').addEventListener('click',()=>{
-    showDialog(`<div class="modal">${modalHeader('Secciones')}<div class="modal-body">${[['calendar','Calendario'],['pending','Pendientes'],['shopping','Compras'],['templates','Tareas guardadas']].map(([key,label])=>`<button class="action-option" type="button" data-go-view="${key}">${label}</button>`).join('')}</div></div>`);
+    showDialog(`<div class="modal">${modalHeader('Secciones')}<div class="modal-body">${[['calendar','Calendario'],['reservations','Reservas'],['pending','Pendientes'],['shopping','Compras'],['templates','Tareas guardadas']].map(([key,label])=>`<button class="action-option" type="button" data-go-view="${key}">${label}</button>`).join('')}</div></div>`);
     content.querySelectorAll('[data-go-view]').forEach(b=>b.addEventListener('click',()=>{closeDialog();setView(b.dataset.goView)}));
   });
   $('floatingAdd').addEventListener('click',openQuickAdd);
   $('newTemplate').addEventListener('click',()=>openTemplateForm());
+  $('newReservation').addEventListener('click',()=>openReservationForm());
   $('settingsButton').addEventListener('click',openSettings);
   $('templateScheduleDate').addEventListener('change',e=>{if(e.target.value)ui.templateDate=e.target.value});
   $('pendingForm').addEventListener('submit',e=>{e.preventDefault();const text=$('pendingInput').value.trim();if(!text){toast('Escribe el pendiente primero');$('pendingInput').focus();return;}data.pending.push({id:uid(),text,done:false});$('pendingInput').value='';save();renderPending();renderTabs()});

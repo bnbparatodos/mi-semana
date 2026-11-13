@@ -3,8 +3,8 @@
   const KEY = 'mi-semana-v1'; // Conserva los datos de v1 al actualizar
   const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   const DAY_CHOICES = [{ n: 1, s: 'L' }, { n: 2, s: 'M' }, { n: 3, s: 'X' }, { n: 4, s: 'J' }, { n: 5, s: 'V' }, { n: 6, s: 'S' }, { n: 0, s: 'D' }];
-  const COLORS = [{id:'azul',label:'Azul'},{id:'verde',label:'Verde'},{id:'naranja',label:'Naranja'},{id:'morado',label:'Morado'},{id:'rosa',label:'Rosa'},{id:'turquesa',label:'Turquesa'},{id:'gris',label:'Gris'}];
-  const colorOf = x => COLORS.some(c=>c.id===x)?x:'azul';
+  const COLORS = [{id:'verde',label:'Verde'},{id:'dorado',label:'Dorado'},{id:'naranja',label:'Amarillo / naranja'},{id:'azul',label:'Azul'},{id:'turquesa',label:'Verde agua'},{id:'beige',label:'Beige'},{id:'morado',label:'Morado'},{id:'rosa',label:'Rosa'},{id:'gris',label:'Gris'}];
+  const colorOf = x => COLORS.some(c=>c.id===x)?x:'verde';
   const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -16,7 +16,26 @@
   const monday = iso => {const d=fromISO(iso);d.setDate(d.getDate()-((d.getDay()+6)%7));return toISO(d)};
   const minute = t => {const m=/^(\d{1,2}):(\d{2})$/.exec(String(t || ''));return m?Number(m[1])*60+Number(m[2]):9*60};
   const timeText = mins => String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0');
-  const defaultData = () => ({ events: [], pending: [], shopping: [], templates: [], completed: {}, skipped: {} });
+  const defaultData = () => ({ events: [], pending: [], shopping: [], templates: [], completed: {}, skipped: {}, overrides: {}, defaultsSeededV13: false });
+  const safeClock = (clock, fallback) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(clock||'')) ? clock : fallback;
+  const legacyMulti = x => eventKind(x)==='multiday' && !x.endTime;
+  const multiStartTime = x => legacyMulti(x) ? '00:00' : safeClock(x?.start, '15:00');
+  const multiEndTime = x => legacyMulti(x) ? '23:59' : safeClock(x?.endTime, '11:00');
+  const multiFinishFraction = x => legacyMulti(x) ? 1 : minute(multiEndTime(x))/1440;
+  const propertyDefaults = [
+    {name:'Biu',color:'naranja',key:'biu'},
+    {name:'Capechik',color:'azul',key:'capechik'},
+    {name:'Moroli',color:'turquesa',key:'moroli'},
+    {name:'Libélula',color:'beige',key:'libelula'}
+  ];
+  function addDefaultTemplates(d){
+    if(d.defaultsSeededV13)return false;
+    for (const property of propertyDefaults) for (const type of [{slug:'limpieza',name:'Limpieza',start:'11:00',kind:'timed',duration:60},{slug:'checkin',name:'Check-in',start:'15:00',kind:'instant',duration:0},{slug:'checkout',name:'Check-out',start:'10:00',kind:'instant',duration:0}]) {
+      const title=type.name+' '+property.name;
+      if(!d.templates.some(t=>t.title?.trim().toLowerCase()===title.toLowerCase()))d.templates.push({id:'predef-'+property.key+'-'+type.slug,title,start:type.start,kind:type.kind,duration:type.duration,color:property.color,repeat:{type:'none',every:2,days:[]}});
+    }
+    d.defaultsSeededV13=true;return true;
+  }
   // Duración libre en minutos. Los registros anteriores (v1) siguen siendo válidos.
   const eventKind = x => ['instant','multiday'].includes(x?.kind) ? x.kind : 'timed';
   const durationMinutes = x => Math.max(1, Math.min(1439, Math.round(Number(x?.duration) || 60)));
@@ -27,12 +46,12 @@
     if (kind==='instant') return 'Sin duración';
     if (kind==='multiday') {
       const count = x?.endDate ? dayDelta(x.date, safeEndDate(x))+1 : daySpan(x);
-      return `${count} ${count===1?'día':'días'} · todo el día`;
+      return `${count} ${count===1?'día':'días'} · ${legacyMulti(x)?'todo el día':multiStartTime(x)+' → '+multiEndTime(x)}`;
     }
     const minutes = durationMinutes(x), h=Math.floor(minutes/60), m=minutes%60;
     return h && m ? `${h} h ${m} min` : h ? `${h} h` : `${m} min`;
   }
-  function kindControls(kind='timed',duration=60,isTemplate=false,endDate='',spanDays=2) {
+  function kindControls(kind='timed',duration=60,isTemplate=false,endDate='',spanDays=2,multiStart='15:00',multiEnd='11:00') {
     kind=eventKind({kind});const initial=Number(duration)>0?Number(duration):60,h=Math.floor(initial/60),m=initial%60;
     return `<fieldset class="task-type-field"><legend>¿Cómo quieres que aparezca?</legend>
       <div class="task-type-choices">
@@ -46,8 +65,9 @@
       </div>
       <p class="duration-info" data-kind-area="instant" ${kind!=='instant'?'hidden':''}>Aparecerá como un aviso pequeño a la hora elegida, sin ocupar una franja larga.</p>
       <div data-kind-area="multiday" ${kind!=='multiday'?'hidden':''}>
-        ${isTemplate ? `<label class="field">¿Cuántos días ocupa?<input type="number" name="spanDays" min="2" max="730" step="1" inputmode="numeric" value="${daySpan({spanDays})}" /></label>` : `<label class="field">Último día (incluido)<input type="date" name="endDate" value="${esc(endDate)}" /></label>`}
-        <p class="duration-info">Se mostrará arriba del calendario, atravesando todos los días que abarca.</p>
+        ${isTemplate ? `<label class="field">¿Cuántos días ocupa?<input type="number" name="spanDays" min="2" max="730" step="1" inputmode="numeric" value="${daySpan({spanDays})}" /></label>` : `<label class="field">Último día<input type="date" name="endDate" value="${esc(endDate)}" /></label>`}
+        <div class="form-row"><label class="field">Hora de inicio<input type="time" name="multiStart" value="${esc(multiStart)}" /></label><label class="field">Hora de fin<input type="time" name="multiEnd" value="${esc(multiEnd)}" /></label></div>
+        <p class="duration-info">La barra superior empezará y terminará según esas horas; podrás leerlas al tocarla.</p>
       </div>`;
   }
   function wireKind(form, isTemplate=false){
@@ -71,11 +91,14 @@
     const kind=form.querySelector('input[name=kind]:checked')?.value||'timed';
     if(kind==='instant') return {kind,duration:0};
     if(kind==='multiday'){
-      if(isTemplate){const n=Number(form.elements.spanDays.value);if(!Number.isInteger(n)||n<2||n>730){toast('Escribe un número de días entre 2 y 730');return null;}return {kind,spanDays:n,duration:0}}
+      const start=safeClock(form.elements.multiStart.value,'');const endTime=safeClock(form.elements.multiEnd.value,'');
+      if(!start||!endTime){toast('Elige las horas de inicio y fin');return null;}
+      if(isTemplate){const n=Number(form.elements.spanDays.value);if(!Number.isInteger(n)||n<2||n>730){toast('Escribe un número de días entre 2 y 730');return null;}return {kind,spanDays:n,start,endTime,duration:0}}
       const date=form.elements.date.value, endDate=form.elements.endDate.value;
       if(!/^\d{4}-\d{2}-\d{2}$/.test(endDate)||endDate<date){toast('La fecha final debe ser igual o posterior al inicio');form.elements.endDate.focus();return null}
       if(dayDelta(date,endDate)>729){toast('Máximo 730 días por reserva');return null;}
-      return {kind,endDate,duration:0};
+      if(date===endDate && minute(endTime)<=minute(start)){toast('La hora de fin debe ser posterior al inicio');return null;}
+      return {kind,endDate,start,endTime,duration:0};
     }
     const hours=Number(form.elements.durationHours.value), minutes=Number(form.elements.durationMinutes.value);
     if(!Number.isInteger(hours)||hours<0||hours>23||!Number.isInteger(minutes)||minutes<0||minutes>59||hours*60+minutes<1){toast('La duración debe ser al menos 1 minuto, o elige «Recordatorio»');return null}
@@ -92,11 +115,13 @@
       if (!parsed || typeof parsed !== 'object') return defaultData();
       const obj = defaultData();
       for (const arr of ['events','pending','shopping','templates']) obj[arr] = Array.isArray(parsed[arr]) ? parsed[arr].filter(x=>x && typeof x==='object') : [];
-      for (const map of ['completed','skipped']) obj[map] = parsed[map] && typeof parsed[map] === 'object' && !Array.isArray(parsed[map]) ? parsed[map] : {};
+      for (const map of ['completed','skipped','overrides']) obj[map] = parsed[map] && typeof parsed[map] === 'object' && !Array.isArray(parsed[map]) ? parsed[map] : {};
+      obj.defaultsSeededV13=!!parsed.defaultsSeededV13;
       return obj;
     } catch {return defaultData()}
   }
   let data = load();
+  if(addDefaultTemplates(data)){try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){console.warn('No se pudo guardar tareas predeterminadas',e)}}
   const ui = {view:'calendar',selectedDate:toISO(new Date()),weekStart:monday(toISO(new Date())),templateDate:toISO(new Date())};
   const dialog=$('dialog'), content=$('dialogContent');
   function save() {try {localStorage.setItem(KEY,JSON.stringify(data))} catch(e){alert('No se pudieron guardar los cambios. Exporta un respaldo y revisa el espacio disponible.')} }
@@ -123,7 +148,7 @@
   dialog.addEventListener('click',e=>{if(e.target===dialog)closeDialog()});
   dialog.addEventListener('close',()=>{if(!dialog.open)content.innerHTML='' });
   function modalHeader(text){return `<div class="modal-head"><h2>${esc(text)}</h2><button type="button" class="close-btn" data-close aria-label="Cerrar">×</button></div>`}
-  function colorControls(selected='azul') {
+  function colorControls(selected='verde') {
     return `<fieldset class="palette-field"><legend>Color de la tarea</legend><div class="palette-choices">${COLORS.map(c=>`<label class="palette-choice" title="${c.label}"><input type="radio" name="color" value="${c.id}" ${colorOf(selected)===c.id?'checked':''} /><span class="palette-dot color-${c.id}"></span><span class="visually-hidden">${c.label}</span></label>`).join('')}</div></fieldset>`;
   }
   function repeatControls(rep,referenceDate) {
@@ -193,11 +218,12 @@
     const start=ui.weekStart,end=addDays(start,6);
     const sd=fromISO(start),ed=fromISO(end);
     $('weekTitle').textContent=sd.getMonth()===ed.getMonth()?`${sd.getDate()}–${ed.getDate()} de ${MONTHS[sd.getMonth()]} ${sd.getFullYear()}`:`${sd.getDate()} ${MONTHS[sd.getMonth()].slice(0,3)} – ${ed.getDate()} ${MONTHS[ed.getMonth()].slice(0,3)} ${ed.getFullYear()}`;
+    $('landWeekTitle').textContent=`${sd.getDate()}–${ed.getDate()} ${MONTHS[ed.getMonth()].slice(0,3)}`;
     const today=toISO(new Date());
     const dates=Array.from({length:7},(_,i)=>addDays(start,i));
     const scroller=$('calendarScroller');
     const oldX=scroller.scrollLeft,oldY=scroller.scrollTop,wasRendered=!!scroller.querySelector('.calendar-table');
-    const events=dates.map(date=>data.events.filter(e=>eventKind(e)!=='multiday' && occurs(e,date)).map(e=>({...e,occDate:date})));
+    const events=dates.map(date=>data.events.filter(e=>eventKind(e)!=='multiday' && occurs(e,date)).map(e=>({...e,occDate:date,start:safeClock(data.overrides[e.id+'@'+date]?.start,e.start||'09:00')})));
     let startHour=6,endHour=23;
     for(const daily of events)for(const e of daily){startHour=Math.min(startHour,Math.floor(minute(e.start)/60));endHour=Math.max(endHour,Math.ceil((minute(e.start)+(eventKind(e)==='instant'?20:durationMinutes(e)))/60));}
     startHour=Math.max(0,startHour);endHour=Math.min(24,Math.max(endHour,startHour+1));
@@ -205,16 +231,24 @@
     scroller.dataset.startHour=String(startHour);
     const timeLabels=Array.from({length:endHour-startHour+1},(_,i)=>`<span class="time-tick" style="top:${i*GRID_HOUR}px">${String(startHour+i).padStart(2,'0')}:00</span>`).join('');
     const head=dates.map((date,i)=>`<button class="head-day ${date===today?'today':''} ${date===ui.selectedDate?'selected':''}" data-date="${date}">${DAYS[i]}<b>${fromISO(date).getDate()}</b></button>`).join('');
-    // Reservas / citas de varios días en una sola franja, sin duplicarse por cada día.
-    const spans=data.events.filter(e=>eventKind(e)==='multiday' && e.date<=end && safeEndDate(e)>=start)
-      .map(e=>({event:e,first:Math.max(0,dayDelta(start,e.date)),last:Math.min(6,dayDelta(start,safeEndDate(e)))}))
-      .sort((a,b)=>a.first-b.first || b.last-a.last);
+    // La barra comparte exactamente las 7 columnas del calendario. El inicio y fin
+    // se expresan como fracciones de día (15:00 = 62.5%), incluso al cruzar semanas.
+    const spans=data.events.filter(e=>eventKind(e)==='multiday' && e.date<=end && safeEndDate(e)>=start).map(e=>{
+      const first=dayDelta(start,e.date)+minute(multiStartTime(e))/1440;
+      const last=dayDelta(start,safeEndDate(e))+multiFinishFraction(e);
+      return {event:e,left:Math.max(0,first),right:Math.min(7,last)};
+    }).filter(x=>x.right>x.left).sort((a,b)=>a.left-b.left || b.right-a.right);
     const lanes=[];let multiBars='';
-    for(const span of spans){let lane=lanes.findIndex(last=>last<span.first);if(lane<0){lane=lanes.length;lanes.push(span.last)}else lanes[lane]=span.last;
+    for (const span of spans) {
+      let lane=lanes.findIndex(right=>right<=span.left+0.001);
+      if(lane<0){lane=lanes.length;lanes.push(span.right)}else lanes[lane]=span.right;
       const e=span.event,done=isDone(e.id,e.date);
-      multiBars+=`<button class="multiday-event ${done?'done':''}" type="button" data-color="${colorOf(e.color)}" data-event="${esc(e.id)}" data-date="${esc(e.date)}" style="grid-column:${span.first+1} / span ${span.last-span.first+1};grid-row:${lane+1}" title="${esc(e.title)} · ${esc(e.date)} – ${esc(safeEndDate(e))}">${esc(e.title)}</button>`;
+      const left=span.left/7*100, width=(span.right-span.left)/7*100;
+      const display=legacyMulti(e)?e.title:`${e.title} · ${multiStartTime(e)}–${multiEndTime(e)}`;
+      const details=`${e.title} · ${e.date} ${multiStartTime(e)} → ${safeEndDate(e)} ${multiEndTime(e)}`;
+      multiBars+=`<button class="multiday-event ${done?'done':''}" type="button" data-color="${colorOf(e.color)}" data-event="${esc(e.id)}" data-date="${esc(e.date)}" style="left:${left}%;width:${width}%;top:${lane*29+4}px" title="${esc(details)}" aria-label="${esc(details)}"><span>${esc(display)}</span></button>`;
     }
-    const allDay=spans.length?`<div class="multiday-row"><div class="all-day-label">Días</div><div class="multiday-track" style="grid-template-rows:repeat(${lanes.length},26px)">${multiBars}</div></div>`:'';
+    const allDay=spans.length?`<div class="multiday-row"><div class="all-day-label">Reservas</div><div class="multiday-track" style="height:${lanes.length*29+8}px">${multiBars}</div></div>`:'';
     const cols=dates.map((date,i)=>{
       const list=events[i].map(e=>({event:e,start:minute(e.start),end:minute(e.start)+(eventKind(e)==='instant'?19:durationMinutes(e))})).sort((a,b)=>a.start-b.start || a.end-b.end);
       // Distribuir tareas simultáneas en columnas para conservar el acceso táctil.
@@ -285,13 +319,13 @@
   function addFromTemplate(template,options={}){
     const date=options.date||ui.templateDate;
     const kind=eventKind(template);
-    const start=kind==='multiday'?(template.start||'09:00'):(options.time||template.start||'09:00');
+    const start=options.time||template.start||'09:00';
     const recurring=kind!=='multiday' && normalizeRepeat(template.repeat).type!=='none';
     const already=data.events.some(e=>String(e.title).trim().toLowerCase()===String(template.title).trim().toLowerCase() && e.start===start && occurs(e,date));
     if(already && !confirm('Esta tarea ya aparece ese día y a esa hora. ¿Quieres duplicarla?'))return;
     const ev={id:uid(),title:template.title,date,start,duration:kind==='instant'?0:kind==='timed'?durationMinutes(template):0,
       kind,repeat:kind==='multiday'?normalizeRepeat(null):normalizeRepeat(template.repeat),color:colorOf(template.color)};
-    if(kind==='multiday')ev.endDate=addDays(date,daySpan(template)-1);
+    if(kind==='multiday'){ev.endDate=addDays(date,daySpan(template)-1);ev.endTime=safeClock(template.endTime,'11:00');}
     data.events.push(ev);save();ui.selectedDate=date;ui.templateDate=date;ui.weekStart=monday(date);ui.view='calendar';render();
     focusCalendarDay(date,kind==='multiday'?null:start);toast(recurring?'Tarea repetitiva agendada':'Tarea agendada');
   }
@@ -334,7 +368,7 @@
       <label class="field">Tarea<input type="text" name="title" maxlength="150" placeholder="Ej. Limpieza Capechik o Reserva Moroli" value="${esc(title)}" required autofocus /></label>
       <label class="field">Primer día<input type="date" name="date" value="${esc(date)}" required /></label>
       <div data-time-field><label class="field">Hora<input type="time" name="start" value="${esc(start)}" required /></label></div>
-      ${kindControls(kind,duration,false,endDate)}
+      ${kindControls(kind,duration,false,endDate,2,event && eventKind(event)==='multiday'?multiStartTime(event):'15:00',event && eventKind(event)==='multiday'?multiEndTime(event):'11:00')}
       ${colorControls(event?.color||t?.color)}
       <div data-recurrence-wrap>${repeatControls(repeat,date)}</div>
       ${!editing?`<label class="checkbox-row"><input type="checkbox" name="alsoTemplate" /> Guardar también como tarea habitual</label>`:repeat.type!=='none'?'<p class="hint">Editar esta tarea cambia toda su serie de repeticiones.</p>':''}
@@ -357,7 +391,7 @@
       if(!editing && form.elements.alsoTemplate?.checked){
         const exists=data.templates.find(x=>x.title.toLowerCase()===title.toLowerCase());
         const template={id:exists?.id||uid(),title,start,repeat:rep,color:next.color,kind:next.kind,duration:next.duration};
-        if(next.kind==='multiday')template.spanDays=dayDelta(date,next.endDate)+1;
+        if(next.kind==='multiday'){template.spanDays=dayDelta(date,next.endDate)+1;template.endTime=next.endTime;}
         if(exists)Object.assign(exists,template);else data.templates.push(template);
       }
       if(args.pendingId)data.pending=data.pending.filter(x=>x.id!==args.pendingId);
@@ -373,7 +407,7 @@
     showDialog(`<div class="modal">${modalHeader(editing?'Editar tarea guardada':'Guardar tarea habitual')}<form id="templateForm" class="modal-body" novalidate>
       <label class="field">Nombre de la tarea<input name="title" maxlength="150" placeholder="Ej. Limpieza Capechik" value="${esc(template?.title||'')}" required autofocus /></label>
       <div data-time-field><label class="field">Hora habitual<input type="time" name="start" value="${esc(template?.start||'09:00')}" required /></label></div>
-      ${kindControls(kind,Number(template?.duration??60),true,'',template?.spanDays)}
+      ${kindControls(kind,Number(template?.duration??60),true,'',template?.spanDays,template && kind==='multiday'?multiStartTime(template):'15:00',template && kind==='multiday'?multiEndTime(template):'11:00')}
       ${colorControls(template?.color)}
       <div data-recurrence-wrap>${repeatControls(rep,ui.templateDate)}</div>
       <p class="hint">Guárdala aquí y podrás agregarla al calendario tocando un día y una hora.</p>
@@ -400,13 +434,19 @@
     const event=data.events.find(x=>x.id===id);if(!event)return;
     const done=isDone(id,day),recurring=eventKind(event)!=='multiday' && normalizeRepeat(event.repeat).type!=='none';
     showDialog(`<div class="modal">${modalHeader('Tu tarea')}<div class="modal-body">
-      <div class="occ-summary"><b><span class="task-color-dot color-${colorOf(event.color)}"></span>${esc(event.title)}</b><span>${esc(dayLong(day))} · ${eventKind(event)==='multiday'?esc('hasta '+dayLong(safeEndDate(event))):esc(event.start)+' · '+esc(durationLabel(event))} ${recurring?'· ↻ '+esc(repeatLabel(event.repeat)):''}</span></div>
-      <div class="stack"><button class="primary" data-complete>${done?'↩ Marcar como pendiente':'✓ Marcar como hecha'}</button><button class="ghost" data-edit>Editar ${recurring?'toda la serie':'tarea'}</button>${recurring?'<button class="ghost" data-skip>Omitir solo este día</button>':''}<button class="danger" data-delete>${recurring?'Eliminar toda la serie':'Eliminar tarea'}</button></div>
+      <div class="occ-summary"><b><span class="task-color-dot color-${colorOf(event.color)}"></span>${esc(event.title)}</b><span>${esc(dayLong(day))} · ${eventKind(event)==='multiday'?esc(dayLong(event.date)+' '+multiStartTime(event)+' → '+dayLong(safeEndDate(event))+' '+multiEndTime(event)):esc(safeClock(data.overrides[id+'@'+day]?.start,event.start))+' · '+esc(durationLabel(event))} ${recurring?'· ↻ '+esc(repeatLabel(event.repeat)):''}</span></div>
+      <div class="stack"><button class="primary" data-complete>${done?'↩ Marcar como pendiente':'✓ Marcar como hecha'}</button><button class="ghost" data-edit>Editar ${recurring?'toda la serie':'tarea'}</button>${recurring?'<button class="ghost" data-one-day>Modificar hora solo este día</button>':''}${recurring?'<button class="ghost" data-skip>Omitir solo este día</button>':''}<button class="danger" data-delete>${recurring?'Eliminar toda la serie':'Eliminar tarea'}</button></div>
     </div></div>`);
     content.querySelector('[data-complete]').addEventListener('click',()=>{const k=id+'@'+day;if(done)delete data.completed[k];else data.completed[k]=true;save();closeDialog();renderCalendar();toast(done?'Tarea pendiente':'Tarea completada')});
     content.querySelector('[data-edit]').addEventListener('click',()=>{closeDialog();openTaskForm({event})});
+    content.querySelector('[data-one-day]')?.addEventListener('click',()=>{
+      const original=data.overrides[id+'@'+day]?.start||event.start||'09:00';
+      showDialog(`<div class="modal">${modalHeader('Solo este día')}<form class="modal-body" id="overrideForm"><p class="slot-summary">${esc(event.title)} · ${esc(dayLong(day))}</p><label class="field">Nueva hora<input name="start" type="time" value="${esc(original)}" required /></label><div class="modal-actions"><button type="button" class="ghost" data-reset-override>Restaurar hora habitual</button><button type="submit" class="primary">Guardar</button></div></form></div>`);
+      content.querySelector('#overrideForm').addEventListener('submit',ev=>{ev.preventDefault();data.overrides[id+'@'+day]={start:ev.target.elements.start.value};save();closeDialog();renderCalendar();toast('Hora modificada solo para ese día')});
+      content.querySelector('[data-reset-override]').addEventListener('click',()=>{delete data.overrides[id+'@'+day];save();closeDialog();renderCalendar();toast('Hora habitual restaurada')});
+    });
     content.querySelector('[data-skip]')?.addEventListener('click',()=>{data.skipped[id+'@'+day]=true;delete data.completed[id+'@'+day];save();closeDialog();renderCalendar();toast('Se omitió solo este día')});
-    content.querySelector('[data-delete]').addEventListener('click',()=>{if(!confirm(recurring?'¿Borrar todas las repeticiones de esta tarea?':'¿Eliminar esta tarea?'))return;data.events=data.events.filter(e=>e.id!==id);for(const k of Object.keys(data.completed))if(k.startsWith(id+'@'))delete data.completed[k];for(const k of Object.keys(data.skipped))if(k.startsWith(id+'@'))delete data.skipped[k];save();closeDialog();renderCalendar()});
+    content.querySelector('[data-delete]').addEventListener('click',()=>{if(!confirm(recurring?'¿Borrar todas las repeticiones de esta tarea?':'¿Eliminar esta tarea?'))return;data.events=data.events.filter(e=>e.id!==id);for(const k of Object.keys(data.completed))if(k.startsWith(id+'@'))delete data.completed[k];for(const k of Object.keys(data.skipped))if(k.startsWith(id+'@'))delete data.skipped[k];for(const k of Object.keys(data.overrides))if(k.startsWith(id+'@'))delete data.overrides[k];save();closeDialog();renderCalendar()});
   }
   function openSettings(){
     showDialog(`<div class="modal">${modalHeader('Respaldo y ajustes')}<div class="modal-body"><p style="font-size:13px;color:#6c7890;margin-bottom:18px">Tus tareas se guardan en este dispositivo, dentro del navegador. Para no perderlas al cambiar de teléfono o borrar los datos, descarga un respaldo.</p><div class="stack"><button class="primary" id="exportBtn">↓ Descargar respaldo (.json)</button><button class="ghost" id="importBtn">↑ Restaurar un respaldo</button></div><div class="divider-line"></div><p class="warning">Esta versión funciona sin cuenta y sin conexión después de instalarla. Todavía no envía notificaciones cuando la aplicación está cerrada.</p></div></div>`);
@@ -420,8 +460,8 @@
     const file=ev.target.files[0];if(!file)return;
     try{if(file.size>5e6)throw new Error('Archivo demasiado grande');const obj=JSON.parse(await file.text());if(!Array.isArray(obj.events)||!Array.isArray(obj.pending)||!Array.isArray(obj.shopping)||!Array.isArray(obj.templates))throw new Error('No es un respaldo compatible');
       if(!confirm('Restaurar reemplazará las tareas actuales con las del archivo. ¿Continuar?'))return;
-      const next={events:obj.events,pending:obj.pending,shopping:obj.shopping,templates:obj.templates,completed:obj.completed||{},skipped:obj.skipped||{}};
-      localStorage.setItem(KEY,JSON.stringify(next));data=load();closeDialog();setView('calendar');toast('Respaldo restaurado');
+      const next={events:obj.events,pending:obj.pending,shopping:obj.shopping,templates:obj.templates,completed:obj.completed||{},skipped:obj.skipped||{},overrides:obj.overrides||{},defaultsSeededV13:obj.defaultsSeededV13||false};
+      localStorage.setItem(KEY,JSON.stringify(next));data=load();if(addDefaultTemplates(data))save();closeDialog();setView('calendar');toast('Respaldo restaurado');
     }catch(e){alert('No se pudo importar: '+e.message)}finally{ev.target.value=''}
   });
   document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>setView(btn.dataset.view)));
@@ -429,6 +469,13 @@
   $('nextWeek').addEventListener('click',()=>{ui.weekStart=addDays(ui.weekStart,7);ui.selectedDate=ui.weekStart;ui.templateDate=ui.selectedDate;renderCalendar()});
   $('todayBtn').addEventListener('click',()=>{ui.selectedDate=toISO(new Date());ui.templateDate=ui.selectedDate;ui.weekStart=monday(ui.selectedDate);$('calendarScroller').innerHTML='';renderCalendar()});
   $('quickAddTop').addEventListener('click',openQuickAdd);
+  $('landPrevWeek').addEventListener('click',()=>$('prevWeek').click());
+  $('landNextWeek').addEventListener('click',()=>$('nextWeek').click());
+  $('landToday').addEventListener('click',()=>$('todayBtn').click());
+  $('landSections').addEventListener('click',()=>{
+    showDialog(`<div class="modal">${modalHeader('Secciones')}<div class="modal-body">${[['calendar','Calendario'],['pending','Pendientes'],['shopping','Compras'],['templates','Tareas guardadas']].map(([key,label])=>`<button class="action-option" type="button" data-go-view="${key}">${label}</button>`).join('')}</div></div>`);
+    content.querySelectorAll('[data-go-view]').forEach(b=>b.addEventListener('click',()=>{closeDialog();setView(b.dataset.goView)}));
+  });
   $('floatingAdd').addEventListener('click',openQuickAdd);
   $('newTemplate').addEventListener('click',()=>openTemplateForm());
   $('settingsButton').addEventListener('click',openSettings);

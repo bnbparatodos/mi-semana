@@ -1,5 +1,5 @@
-const CACHE_NAME = 'mi-semana-static-v4';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE_NAME = 'mi-semana-static-v13';
+const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-192.png?v=13', './icon-512.png?v=13'];
 self.addEventListener('install', evt => {
   evt.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

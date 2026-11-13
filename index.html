@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#f8f9fd" />
+  <meta name="theme-color" content="#fbfaf5" />
   <meta name="description" content="Un calendario semanal sencillo para tareas, pendientes y compras." />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" type="image/png" href="icon-192.png" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="icon" type="image/png" href="icon-192.png?v=13" />
+  <link rel="apple-touch-icon" href="icon-192.png?v=13" />
   <title>Mi Semana · Agenda sencilla</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -16,7 +16,7 @@
     <header class="topbar">
       <div class="identity">
         <div class="brand-mark" aria-hidden="true">✓</div>
-        <div><div class="brand">Mi Semana</div><div class="subtitle">Todo en orden, sin complicaciones.</div></div>
+        <div><div class="brand">Mi Semana</div><div class="subtitle">bnbparatodos · Todo en orden.</div></div>
       </div>
       <div class="header-actions">
         <button class="icon-btn" id="settingsButton" aria-label="Copia de seguridad y ajustes" title="Respaldo y ajustes">
@@ -46,6 +46,9 @@
         <div class="calendar-guide">Toca un día y una hora para elegir una tarea guardada o crear una nueva.</div>
         <div class="calendar-shell">
           <div id="calendarScroller" class="calendar-scroller" tabindex="0" aria-label="Calendario semanal con horarios"></div>
+        </div>
+        <div class="landscape-controls" aria-label="Navegación del calendario horizontal">
+          <button id="landPrevWeek" type="button" aria-label="Semana anterior">‹</button><span id="landWeekTitle"></span><button id="landNextWeek" type="button" aria-label="Semana siguiente">›</button><button id="landToday" type="button">Hoy</button><button id="landSections" type="button" aria-label="Otras secciones">☰</button>
         </div>
         <div class="calendar-footnote"><span class="legend-dot"></span> Las tareas repetidas aparecerán automáticamente en sus próximos días.</div>
       </section>
